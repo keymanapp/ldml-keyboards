@@ -1,0 +1,138 @@
+# Annotations
+
+annotation len16(field) :UInt16;
+annotation len8(field) :UInt8;
+annotation if(field) :UInt16;
+
+# Basic types
+using CC = UInt32;
+using offset = UInt32;
+using char = UInt32;
+
+struct string32 {
+    len :UInt16;
+    c :List(char);
+}
+
+struct string8 {
+    c :List(Uint8);
+    z :UInt8 = 0;
+}
+
+# Directory
+struct DirEntry {
+    name :4CC;
+    offset :offset;
+    length :UInt32;
+    version :UInt32;
+}
+
+struct Directory {
+    entries :List(DirEntry);
+}
+
+# Trie
+struct Trie {
+    type :UInt8;
+    reserved :UInt8;
+    numentries :UInt16;
+    triedata :union {
+        ordered :List(orderedTrie) $len16(numentries);
+        segmented :List(segmentedTrie) $len16(numentries);
+    }
+}
+
+struct orderedTrie {
+    c :char;
+    o :offset;
+}
+
+struct segmentedTrie {
+    length :UInt16;
+    c :char;
+    offsets :List(offset) $len16(length);
+}
+
+# Simple Transform
+struct Rule {
+    error :Bool;
+    blen :UInt8;
+    alen :UInt8;
+    oAfter :UInt16;
+    before :List(Trie) $len8(blen);
+    after :List(Trie) $len8(alen);
+    to :string32;
+}
+
+struct trns {
+    settings :UInt16;
+    numRules :UInt16;
+    t :Trie;
+    outputs :List(Rule) $len16(numRules);
+}
+
+# Final Transform
+struct trnf {
+    numRules :UInt16;
+    t :Trie;
+    outputs :List(Rule) $len16(numRules);
+}
+
+# Backspace Transform
+struct trnb {
+    numRules :UInt16;
+    t :Trie;
+    outputs :List(Rule) $len16(numRules);
+}
+
+# Reorder
+struct OrderRule {
+    struct info {
+        prebase :Bool;
+        tertiary_base :Bool;
+        order :Int8;
+    }
+    error :Bool;
+    flen :UInt8;
+    blen :UInt8;
+    alen :UInt8;
+    oBefore :UInt16;
+    oAfter :UInt16;
+    order :List(info) $len8(flen);
+    before :List(Trie) $len8(blen);
+    after :List(Trie) $len8(alen);
+}
+
+struct trnr {
+    numRules :UInt16;
+    t :Trie;
+    outputs :List(OrderRule) $len16(numRules);
+}
+
+# KeyMaps
+struct KeyMap {
+    eModLen :UInt8;
+    modifiers :UInt16;
+    oEntries :UInt16;
+    entriesLen :UInt16;
+    eModifiers :Data $len8(eModLen);
+    t :Trie;
+    entries :List(kmapEntry);
+}
+
+struct kmapEntry {
+    to :string32;
+    multiLen :UInt8;
+    oLong :UInt16;
+    longLen :UInt8;
+    oFlick :UInt16;
+    multiTap :List(string32) $len8(multiLen);
+    longPress :List(string32) $len8(longLen);
+    flicks :List(string32) $len8(8) $if(oFlick);
+}
+
+struct kmap {
+    klen :UInt8;
+    maps :List(KeyMap);
+}
+
