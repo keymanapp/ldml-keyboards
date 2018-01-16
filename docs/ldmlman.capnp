@@ -1,3 +1,6 @@
+# Note that any o- prefixed field indicates a memory-address offset.
+# E.g: In the Rule struct, oAfter = offset within table to the 'after' field.
+
 # Annotations
 
 annotation len16(field) :UInt16;
@@ -36,6 +39,8 @@ struct Trie {
     type :UInt8;
     reserved :UInt8;
     numEntries :UInt16;
+    oResult :UInt16; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
+                     # 0 indicates transition node (no rule here)
     trieData :union {
         ordered :List(orderedTrie) $len16(numentries);
         segmented :List(segmentedTrie) $len16(numentries);
@@ -44,20 +49,19 @@ struct Trie {
 
 struct orderedTrie {
     c :char;
-    o :offset;
-}
+    o :offset; # Offset to next Trie node
 
-struct segmentedTrie {
-    length :UInt16;
-    c :char;
-    offsets :List(offset) $len16(length);
+struct segmentedTrie {  # Run-length encoding style
+    length :UInt16; # Number of subsequent chars.
+    c :char; # First char
+    offsets :List(offset) $len16(length); # Offset to next Trie node.
 }
 
 # Simple Transform
 struct Rule {
     error :Bool;
 	oBefore :UInt16;
-    oAfter :UInt16;  # Offset in table to 'after'.
+    oAfter :UInt16;  
 	to :string32;
     before :Trie;
     after :Trie;
