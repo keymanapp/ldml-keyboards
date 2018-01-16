@@ -2,6 +2,9 @@
 
 # Note that any o- prefixed field indicates a memory-address offset.
 # E.g: In the Rule struct, oAfter = offset within table to the 'after' field.
+#
+# Additionally, List implies a managed corresponding 'length' element for the representation.
+# Cap'n Proto automanages this.
 
 # Annotations
 
@@ -15,7 +18,8 @@ using FourCC = UInt32; # Denotes a four-character code in ASCII, compressed into
                        # TODO: Is FourCC Little-endian or Big-endian?
 using Offset = UInt32; # Denotes an address offset for use in memory-mapped loads.
 using Char = UInt32; # Denotes a UTF-32 character.
-using BitFlags32 = UInt32;  # Denotes a set of bit flags representing multiple booleans.
+using BitFlags16 = UInt16;  # Denotes a set of bit flags representing multiple booleans.
+using VkeyCode = UInt16;    # Denotes a VKey value.
 
 struct String32 { # Denotes a UTF-32-based string.
     len @0 :UInt16;
@@ -30,7 +34,7 @@ struct String32 { # Denotes a UTF-32-based string.
 # Directory
 struct DirEntry {
     name @0 :FourCC;
-    offset @1 :Offset;
+    offset @1 :Offset;  # Offset to the represented table.
     length @2 :UInt32;
     version @3 :UInt32;
 }
@@ -40,11 +44,14 @@ struct Directory {
 }
 
 # Trie
+
+annotation result(field) :Text; # Denotes the type represented by the 'result' field.
+
 struct Trie {
     type @0 :UInt8;
     reserved @1 :UInt8;
     numEntries @2 :UInt16;
-    oResult @3 :Offset; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
+    result @3 :UInt32; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
                      # 0 indicates transition node (no rule here)
     trieData :union {
         ordered @4 :List(OrderedTrie) $len16("numEntries");
@@ -58,9 +65,8 @@ struct OrderedTrie {
 }
 
 struct SegmentedTrie {  # Run-length encoding style
-    length @0 :UInt16; # Number of subsequent chars.
-    c @1 :Char; # First char
-    offsets @2 :List(Offset) $len16("length"); # Offset to next Trie node.
+    c @0 :Char; # First char
+    offsets @1 :List(Offset); # Offset to next Trie node.
 }
 
 # Simple Transform
@@ -69,15 +75,15 @@ struct Rule {
 	oBefore @1 :Offset;
     oAfter @2 :Offset;  
 	to @3 :String32;
-    before @4 :Trie;
-    after @5 :Trie;
+    before @4 :Trie $result("Bool");
+    after @5 :Trie $result("Bool");
 }
 
 struct Trns {
     settings @0 :UInt16;
     numRules @1 :UInt16;
 	oOutputs @2 :Offset;
-    t @3 :Trie;
+    t @3 :Trie $result("Offset"); # Rule
     outputs @4 :List(Rule) $len16("numRules");
 }
 
@@ -85,7 +91,7 @@ struct Trns {
 struct Trnf {
     numRules @0 :UInt16;
 	oOutputs @1 :Offset;
-    t @2 :Trie;
+    t @2 :Trie $result("Offset"); # Rule
     outputs @3 :List(Rule) $len16("numRules");
 }
 
@@ -93,7 +99,7 @@ struct Trnf {
 struct Trnb {
     numRules @0 :UInt16;
 	oOutputs @1 :Offset;
-    t @2 :Trie;
+    t @2 :Trie $result("Offset"); # Rule
     outputs @3 :List(Rule) $len16("numRules");
 }
 
@@ -108,14 +114,14 @@ struct OrderRule {
     iLen @1 :UInt8;
 	oAfter @2 :Offset;
     order @3 :List(Info) $len8("iLen");
-    before @4 :Trie;
-    after @5 :Trie;
+    before @4 :Trie $result("Bool");
+    after @5 :Trie $result("Bool");
 }
 
 struct Trnr {
     numRules @0 :UInt16;
 	oOutputs @1 :Offset;
-    t @2 :Trie;
+    t @2 :Trie $result("Offset"); # Rule
     outputs @3 :List(OrderRule) $len16("numRules");
 }
 
@@ -126,7 +132,7 @@ struct KeyMap {
     oEntries @2 :Offset;
     entriesLen @3 :UInt16;
     eModifiers @4 :Data $len8("eModLen");
-    t @5 :Trie;
+    t @5 :Trie $result("FourCC");
     entries @6 :List(KmapEntry) $len16("entriesLen");
 }
 
@@ -143,63 +149,59 @@ struct KmapEntry {
 }
 
 struct Kmap {
-    klen @0 :UInt8;
-    maps @1 :List(KeyMap);
-}
-
-struct Vkey {
-    oVkey @0 :Offset;
-    oMod @1 :Offset;
-    iso @2 :String32;
-    vkey @3 :String32;
-    mod @4 :String32;
+    maps @0 :List(KeyMap);
 }
 
 struct LayerKey {
     #width :UInt16; # or should it be Float32? # Denotes the width of a key.
-    oIso @0 :Offset;
+    iso @0 :FourCC; # The represented key ISO code.
     oHint @1 :Offset;
     cap @2 :String32; # The displayed key cap.
-    iso @3 :String32; # The represented key ISO code.
-    hint @4 :String32; # The longpress hint, if it exists.
+    hint @3 :String32; # The longpress hint, if it exists.
 }
 
 struct LayerRow {
-    keysLen @0 :UInt8;
-    keys @1 :List(LayerKey) $len8("keysLen");
+    keys @0 :List(LayerKey);
 }
 
 struct LayerSwitch {
     oLayer @0 :Offset;
-    oCap @1 :Offset;
-    iso @2 :String32;
-    layer @3 :String32;
-    keycap @4 :String32;
+    iso @1: FourCC;
+    layer @2 :String32;
 }
 
 struct Layer {
-    modifier @0 :BitFlags32; # A set of bitflags corresponding to the modifier represented by the layer.
+    modifier @0 :BitFlags16; # A set of bitflags corresponding to the modifier represented by the layer.
     rowsLen @1 :UInt8;
     switchesLen @2 :UInt8;
     vkeysLen @3 :UInt8;
     oSwitches @4 :Offset;
-    oVkeys @5 :Offset;
-    rows @6 :List(LayerRow) $len8("rowsLen");
-    switches @7 :List(LayerSwitch) $len8("switchesLen");
-    vkeys @8 :List(Vkey) $len8("vkeysLen");
+    rows @5 :List(LayerRow) $len8("rowsLen");
+    switches @6 :List(LayerSwitch) $len8("switchesLen");
 }
 
 struct Layr {
-    llen @0 :UInt8; 
-    layers @1 :List(Layer);
+    layers @0 :List(Layer);
 }
 
 struct Name {
-    lname @0 :UInt8;  # Assuming this 'name table length'
-    nameLen @1 :UInt8;
-    names @2 :List(String32) $len8("nameLen");
+    names @0 :List(String32);
 }
 
 struct Head {
     ver @0 :String32;
+}
+
+struct VkeyEntry {
+    vkeyCode @0: VkeyCode;
+    modifiers @1: BitFlags16;
+}
+
+struct PlatformVkeys {
+    platId @0: FourCC; # 'windows', 'macosx' 
+    t @1: Trie $result("Offset"); # to VkeyEntry
+}
+
+struct Vkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
+    platforms @0 :List(PlatformVkeys);
 }
