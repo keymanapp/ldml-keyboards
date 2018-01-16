@@ -5,7 +5,7 @@ annotation len8(field) :UInt8;
 annotation if(field) :UInt16;
 
 # Basic types
-using CC = UInt32;
+using FourCC = UInt32;
 using offset = UInt32;
 using char = UInt32;
 
@@ -21,7 +21,7 @@ struct string8 {
 
 # Directory
 struct DirEntry {
-    name :4CC;
+    name :FourCC;
     offset :offset;
     length :UInt32;
     version :UInt32;
@@ -35,8 +35,8 @@ struct Directory {
 struct Trie {
     type :UInt8;
     reserved :UInt8;
-    numentries :UInt16;
-    triedata :union {
+    numEntries :UInt16;
+    trieData :union {
         ordered :List(orderedTrie) $len16(numentries);
         segmented :List(segmentedTrie) $len16(numentries);
     }
@@ -56,17 +56,17 @@ struct segmentedTrie {
 # Simple Transform
 struct Rule {
     error :Bool;
-    blen :UInt8;
-    alen :UInt8;
-    oAfter :UInt16;
-    before :List(Trie) $len8(blen);
-    after :List(Trie) $len8(alen);
-    to :string32;
+	oBefore :UInt16;
+    oAfter :UInt16;  # Offset in table to 'after'.
+	to :string32;
+    before :Trie;
+    after :Trie;
 }
 
 struct trns {
     settings :UInt16;
     numRules :UInt16;
+	oOutputs :UInt16;
     t :Trie;
     outputs :List(Rule) $len16(numRules);
 }
@@ -74,6 +74,7 @@ struct trns {
 # Final Transform
 struct trnf {
     numRules :UInt16;
+	oOutputs :UInt16;
     t :Trie;
     outputs :List(Rule) $len16(numRules);
 }
@@ -81,6 +82,7 @@ struct trnf {
 # Backspace Transform
 struct trnb {
     numRules :UInt16;
+	oOutputs :UInt16;
     t :Trie;
     outputs :List(Rule) $len16(numRules);
 }
@@ -93,18 +95,16 @@ struct OrderRule {
         order :Int8;
     }
     error :Bool;
-    flen :UInt8;
-    blen :UInt8;
-    alen :UInt8;
-    oBefore :UInt16;
-    oAfter :UInt16;
-    order :List(info) $len8(flen);
-    before :List(Trie) $len8(blen);
-    after :List(Trie) $len8(alen);
+    iLen :UInt8;
+	oAfter :UInt16;
+    order :List(info) $len8(iLen);
+    before :Trie;
+    after :Trie;
 }
 
 struct trnr {
     numRules :UInt16;
+	oOutputs :UInt16;
     t :Trie;
     outputs :List(OrderRule) $len16(numRules);
 }
