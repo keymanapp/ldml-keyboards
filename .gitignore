@@ -15,6 +15,10 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 
+# Intermediate files
+src/ldmlman.capnp.*
+docs/ldmlman.capnp.*
+
 # Output directories
 bin
 lib
