@@ -5,18 +5,18 @@
 #
 # Additionally, List implies a managed corresponding 'length' element for the representation.
 # Cap'n Proto automanages this.
+#
+# It also automanages offsets to each entry within a structure, which would need to be implemented
+# if this turns more into a specification reference file for a different implementation.
 
 # Annotations
 
-annotation len16(field) :Text; # Denotes the field name to contain this field's length.
-annotation len8(field) :Text;  # Denotes the field name to contain this field's length.
-annotation fixedLen(field) :UInt8; # Denotes a constant length for the field's List.
+annotation fixedLen(field) :UInt8;
 annotation if(field) :Text;
 
 # Basic types
 using FourCC = UInt32; # Denotes a four-character code in ASCII, compressed into a single 32-bit value.  
                        # TODO: Is FourCC Little-endian or Big-endian?
-using Offset = UInt32; # Denotes an address offset for use in memory-mapped loads.
 using Char = UInt32; # Denotes a UTF-32 character.
 using BitFlags16 = UInt16;  # Denotes a set of bit flags representing multiple booleans.
 using VkeyCode = UInt16;    # Denotes a VKey value.
@@ -32,9 +32,9 @@ struct String32 { # Denotes a UTF-32-based string.
 # }
 
 # Directory
-struct DirEntry {
+struct DirEntry(Table) {
     name @0 :FourCC;
-    offset @1 :Offset;  # Offset to the represented table.
+    table @1 :Table;  # Reference to the represented table.
     length @2 :UInt32;
     version @3 :UInt32;
 }
@@ -44,120 +44,119 @@ struct Directory {
 }
 
 # Trie
+annotation key(field) :Text;    # Denotes the type of the key in the trie.
 
-annotation result(field) :Text; # Denotes the type represented by the 'result' field.
+struct Trie(Result) {
+    result @0 :Result;
 
-struct Trie {
-    type @0 :UInt8;
-    reserved @1 :UInt8;
-    numEntries @2 :UInt16;
-    result @3 :UInt32; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
-                     # 0 indicates transition node (no rule here)
     trieData :union {
-        ordered @4 :List(OrderedTrie) $len16("numEntries");
-        segmented @5 :List(SegmentedTrie) $len16("numEntries");
+        ordered @1 :List(OrderedTrie);
+        segmented @2 :List(SegmentedTrie);
     }
 }
 
-struct OrderedTrie {
+struct OrderedTrie(Result) {
     c @0 :Char;
-    o @1 :Offset; # Offset to next Trie node
+    t @1 :Trie(Result); # Reference to next Trie node
 }
 
-struct SegmentedTrie {  # Run-length encoding style
+struct SegmentedTrie(Result) {  # Run-length encoding style
     c @0 :Char; # First char
-    offsets @1 :List(Offset); # Offset to next Trie node.
+    t @1 :List(Trie(Result)); # Reference to next Trie node for each char in run.
 }
 
-# Simple Transform
+struct BoolTrie {
+    result @0 :Bool; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
+                       # 0 indicates transition node (no rule here)
+    trieData :union {
+        ordered @1 :List(BoolOrderedTrie);
+        segmented @2 :List(BoolSegmentedTrie);
+    }
+}
+
+struct BoolOrderedTrie {
+    c @0 :Char;
+    t @1 :BoolTrie; # Reference to next Trie node
+}
+
+struct BoolSegmentedTrie {  # Run-length encoding style
+    c @0 :Char; # First char
+    t @1 :List(BoolTrie); # Reference to next Trie node for each char in run.
+}
+
+# trns table - Simple Transform
 struct Rule {
     error @0 :Bool;
-	oBefore @1 :Offset;
-    oAfter @2 :Offset;  
-	to @3 :String32;
-    before @4 :Trie $result("Bool");
-    after @5 :Trie $result("Bool");
+    next @1 :Rule; # To the next 'Rule' with the same 'from'.
+	to @2 :String32;
+    before @3 :BoolTrie;
+    after @4 :BoolTrie;
 }
 
-struct Trns {
+struct TableTrns {
     settings @0 :UInt16;
-    numRules @1 :UInt16;
-	oOutputs @2 :Offset;
-    t @3 :Trie $result("Offset"); # Rule
-    outputs @4 :List(Rule) $len16("numRules");
+    t @1 :Trie(Rule) $key("Char");
+    #outputs @2 :List(Rule);  # Would be a master list of the contained Rule objects.
 }
 
-# Final Transform
-struct Trnf {
-    numRules @0 :UInt16;
-	oOutputs @1 :Offset;
-    t @2 :Trie $result("Offset"); # Rule
-    outputs @3 :List(Rule) $len16("numRules");
+# trnf table - Final transforms
+struct TableTrnf {
+    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
+    #outputs @1 :List(Rule);
 }
 
-# Backspace Transform
-struct Trnb {
-    numRules @0 :UInt16;
-	oOutputs @1 :Offset;
-    t @2 :Trie $result("Offset"); # Rule
-    outputs @3 :List(Rule) $len16("numRules");
+# trnb table - backspace transforms
+struct TableTrnb {
+    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
+    #outputs @1 :List(Rule);
 }
 
-# Reorder
+# trnr table - reorders
 struct OrderRule {
     struct Info {
         prebase @0 :Bool;
         tertiaryBase @1 :Bool;
         order @2 :Int8;
+        tertiary @3 :Int8;
     }
     error @0 :Bool;
-    iLen @1 :UInt8;
-	oAfter @2 :Offset;
-    order @3 :List(Info) $len8("iLen");
-    before @4 :Trie $result("Bool");
-    after @5 :Trie $result("Bool");
+    next @1 :OrderRule; # To the 'next' OrderRule with the same 'from'.
+    order @2 :List(Info);
+    before @3 :BoolTrie;
+    after @4 :BoolTrie;
 }
 
-struct Trnr {
-    numRules @0 :UInt16;
-	oOutputs @1 :Offset;
-    t @2 :Trie $result("Offset"); # Rule
-    outputs @3 :List(OrderRule) $len16("numRules");
+struct TableTrnr {
+    t @0 :Trie(OrderRule) $key("Char");; # Rule
+    #outputs @1 :List(OrderRule);
 }
 
-# KeyMaps
+# kmap table - KeyMaps
 struct KeyMap {
-    eModLen @0 :UInt8;
-    modifiers @1 :UInt16;
-    oEntries @2 :Offset;
-    entriesLen @3 :UInt16;
-    eModifiers @4 :Data $len8("eModLen");
-    t @5 :Trie $result("FourCC");
-    entries @6 :List(KmapEntry) $len16("entriesLen");
+    modifiers @0 :UInt16;
+    eModifiers @1 :List(UInt8);
+    t @2 :Trie(KmapEntry) $key("FourCC");
+    entries @3 :List(KmapEntry);
 }
 
 struct KmapEntry {
     to @0 :String32;
-    multiLen @1 :UInt8;
-    oLong @2 :Offset;
-    longLen @3 :UInt8;
-    oFlick @4 :Offset;
-    #hint: :String32; # If doing longpress hints, what string signals to a user that the key has longpress options?
-    multiTap @5 :List(String32) $len8("multiLen");
-    longPress @6 :List(String32) $len8("longLen");
-    flicks @7 :List(String32) $fixedLen(8) $if("oFlick");
+    #hint: :String32; #  Displayed as minor text element on key
+    multiTap @1 :List(String32);
+    longPress @2 :List(String32);
+    flicks @3 :List(String32) $fixedLen(8) $if("oFlick");
 }
 
-struct Kmap {
+struct TableKmap {
     maps @0 :List(KeyMap);
 }
 
+# layr table
 struct LayerKey {
     #width :UInt16; # or should it be Float32? # Denotes the width of a key.
     iso @0 :FourCC; # The represented key ISO code.
-    oHint @1 :Offset;
-    cap @2 :String32; # The displayed key cap.
-    hint @3 :String32; # The longpress hint, if it exists.
+    cap @1 :String32; # The displayed key cap.
+    hint @2 :String32; # The longpress hint, if it exists.
 }
 
 struct LayerRow {
@@ -165,43 +164,62 @@ struct LayerRow {
 }
 
 struct LayerSwitch {
-    oLayer @0 :Offset;
-    iso @1: FourCC;
-    layer @2 :String32;
+    iso @0 :FourCC;
+    layer @1 :String32;
 }
 
 struct Layer {
     modifier @0 :BitFlags16; # A set of bitflags corresponding to the modifier represented by the layer.
-    rowsLen @1 :UInt8;
-    switchesLen @2 :UInt8;
-    vkeysLen @3 :UInt8;
-    oSwitches @4 :Offset;
-    rows @5 :List(LayerRow) $len8("rowsLen");
-    switches @6 :List(LayerSwitch) $len8("switchesLen");
+    eModifiers @1 :List(UInt8);
+    rows @2 :List(LayerRow);
+    switches @3 :List(LayerSwitch);
 }
 
-struct Layr {
+struct TableLayr {
     layers @0 :List(Layer);
 }
 
-struct Name {
-    names @0 :List(String32);
+struct NameEntry {
+    id @0 :FourCC;
+    name @1 :Text;
 }
 
-struct Head {
-    ver @0 :String32;
+struct TableName {
+    entries @0 :List(NameEntry);
 }
 
+struct TableHead {
+    publishDate @0 :UInt64;
+}
+
+# vkey table
 struct VkeyEntry {
     vkeyCode @0: VkeyCode;
     modifiers @1: BitFlags16;
 }
 
 struct PlatformVkeys {
-    platId @0: FourCC; # 'windows', 'macosx' 
-    t @1: Trie $result("Offset"); # to VkeyEntry
+    platId @0 :FourCC; # 'windows', 'macosx'
+    parent @1 :FourCC;  # The 'platId' version of this struct to use for default values.
+    t @2: Trie(VkeyEntry) $key("FourCC"); # to VkeyEntry
 }
 
-struct Vkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
+struct TableVkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
     platforms @0 :List(PlatformVkeys);
+}
+
+struct CordEntry { # Or, just a UInt16 to be unpacked, if we need that optimization.
+    struct CordVal {
+        hasRule @0 :Bool;
+        isTertiary @1 :Bool;
+        tertiaryBase @2 :Bool;
+        preBase @3 :Bool;
+        order @4 :UInt8;
+    }
+    c @0 :Char;
+    v @1 :CordVal;
+}
+
+struct TableCord { # Character ordering
+    entries @0: List(CordEntry);
 }
