@@ -101,13 +101,13 @@ struct TableTrns {
 
 # trnf table - Final transforms
 struct TableTrnf {
-    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
+    t @0 :Trie(Rule) $key("Char"); # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
 # trnb table - backspace transforms
 struct TableTrnb {
-    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
+    t @0 :Trie(Rule) $key("Char"); # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
@@ -127,7 +127,7 @@ struct OrderRule {
 }
 
 struct TableTrnr {
-    t @0 :Trie(OrderRule) $key("Char");; # Rule
+    t @0 :Trie(OrderRule) $key("Char"); # Rule
     #outputs @1 :List(OrderRule);
 }
 

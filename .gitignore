@@ -1,1 +1,22 @@
+# Visual Studio .gitignore
 .vs/
+*.vcxproj
+*.vcxproj.filters
+*.sln
+
+# CMake standard .gitignores
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+
+# Output directories
+bin
+lib
+Win32
+ldml-keyboards.dir
