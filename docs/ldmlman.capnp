@@ -44,13 +44,11 @@ struct Directory {
 }
 
 # Trie
-
-annotation result(field) :Text; # Denotes the type represented by the 'result' field.
 annotation key(field) :Text;    # Denotes the type of the key in the trie.
 
 struct Trie(Result) {
     result @0 :Result;
-    
+
     trieData :union {
         ordered @1 :List(OrderedTrie);
         segmented @2 :List(SegmentedTrie);
@@ -97,19 +95,19 @@ struct Rule {
 
 struct TableTrns {
     settings @0 :UInt16;
-    t @1 :Trie(Rule);
+    t @1 :Trie(Rule) $key("Char");
     #outputs @2 :List(Rule);  # Would be a master list of the contained Rule objects.
 }
 
 # trnf table - Final transforms
 struct TableTrnf {
-    t @0 :Trie(Rule); # Rule index into outputs.
+    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
 # trnb table - backspace transforms
 struct TableTrnb {
-    t @0 :Trie(Rule); # Rule index into outputs.
+    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
@@ -129,7 +127,7 @@ struct OrderRule {
 }
 
 struct TableTrnr {
-    t @0 :Trie(OrderRule); # Rule
+    t @0 :Trie(OrderRule) $key("Char");; # Rule
     #outputs @1 :List(OrderRule);
 }
 
@@ -203,7 +201,7 @@ struct VkeyEntry {
 struct PlatformVkeys {
     platId @0 :FourCC; # 'windows', 'macosx'
     parent @1 :FourCC;  # The 'platId' version of this struct to use for default values.
-    t @2: Trie(VkeyEntry); # to VkeyEntry
+    t @2: Trie(VkeyEntry) $key("FourCC"); # to VkeyEntry
 }
 
 struct TableVkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
