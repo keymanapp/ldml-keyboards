@@ -8,11 +8,14 @@
 #
 # It also automanages offsets to each entry within a structure, which would need to be implemented
 # if this turns more into a specification reference file for a different implementation.
+#
+# Some design decisions in this file are due to Cap'n Proto limitations - for example, List(<generic type>) is not supported.
 
 # Annotations
 
 annotation fixedLen(field) :UInt8;
 annotation if(field) :Text;
+annotation value(field) :Text;
 
 # Basic types
 using FourCC = UInt32; # Denotes a four-character code in ASCII, compressed into a single 32-bit value.  
@@ -20,16 +23,12 @@ using FourCC = UInt32; # Denotes a four-character code in ASCII, compressed into
 using Char = UInt32; # Denotes a UTF-32 character.
 using BitFlags16 = UInt16;  # Denotes a set of bit flags representing multiple booleans.
 using VkeyCode = UInt16;    # Denotes a VKey value.
+using Index = UInt16;
 
 struct String32 { # Denotes a UTF-32-based string.
     len @0 :UInt16;
     c @1 :List(Char);
 }
-
-# struct String8 { 
-#     c @0 :List(UInt8);
-#     z @1 :UInt8 = 0;
-# }
 
 # Directory
 struct DirEntry(Table) {
@@ -46,31 +45,45 @@ struct Directory {
 # Trie
 annotation key(field) :Text;    # Denotes the type of the key in the trie.
 
-struct Trie {
-    result @0 :UInt16; # Index into list of Rules
+struct RuleTrie {
+    tries @0 :List(Node);  # Root @ index 0.
+    results @1 :List(Rule);
+}
+
+struct OrderRuleTrie {
+    tries @0 :List(Node);  # Root @ index 0.
+    results @1 :List(OrderRule);
+}
+
+struct Node {
+    result @0 :Index; # Index into list of results of the TrieRoot.
 
     trieData :union {
-        ordered @1 :List(OrderedTrie);
-        segmented @2 :List(SegmentedTrie);
+        ordered @1 :List(OrderedMap);
+        segmented @2 :List(SegmentedMap);
     }
 }
 
-struct OrderedTrie {
+struct OrderedMap {
     c @0 :Char;
-    t @1 :UInt32; # Reference to next Trie node
+    t @1 :Index; # Reference to next Trie node
 }
 
-struct SegmentedTrie {  # Run-length encoding style
+struct SegmentedMap {  # Run-length encoding style
     c @0 :Char; # First char
-    t @1 :UInt32; # Reference to next Trie node for each char in run.
+    t @1 :Index; # Reference to next Trie node for each char in run.
 }
 
 struct BoolTrie {
+    tries @0 :List(BoolNode);  # Root @ index 0.
+}
+
+struct BoolNode {
     result @0 :Bool; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
                        # 0 indicates transition node (no rule here)
     trieData :union {
-        ordered @1 :List(OrderedTrie);
-        segmented @2 :List(SegmentedTrie);
+        ordered @1 :List(OrderedMap);
+        segmented @2 :List(SegmentedMap);
     }
 }
 
@@ -79,25 +92,25 @@ struct Rule {
     error @0 :Bool;
     next @1 :Rule; # To the next 'Rule' with the same 'from'.
 	to @2 :String32;
-    before @3 :List(BoolTrie);
-    after @4 :List(BoolTrie);
+    before @3 :BoolTrie $key("Char");
+    after @4 :BoolTrie $key("Char");
 }
 
 struct TableTrns {
     settings @0 :UInt16;
-    t @1 :List(Trie) $key("Char");
+    t @1 :RuleTrie $key("Char");
     #outputs @2 :List(Rule);  # Would be a master list of the contained Rule objects.
 }
 
 # trnf table - Final transforms
 struct TableTrnf {
-    t @0 :List(Trie) $key("Char"); # Rule index into outputs.
+    t @0 :RuleTrie $key("Char"); # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
 # trnb table - backspace transforms
 struct TableTrnb {
-    t @0 :List(Trie) $key("Char"); # Rule index into outputs.
+    t @0 :RuleTrie $key("Char"); # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
@@ -112,29 +125,37 @@ struct OrderRule {
     error @0 :Bool;
     next @1 :OrderRule; # To the 'next' OrderRule with the same 'from'.
     order @2 :List(Info);
-    before @3 :List(BoolTrie);
-    after @4 :List(BoolTrie);
+    before @3 :BoolTrie $key("Char");
+    after @4 :BoolTrie $key("Char");
 }
 
 struct TableTrnr {
-    t @0 :List(Trie) $key("Char"); # Rule
+    t @0 :OrderRuleTrie $key("Char"); # Rule
     #outputs @1 :List(OrderRule);
+}
+
+struct KmapTrie {
+    tries @0 :List(Node);  # Root @ index 0.
+    results @1 :List(KmapEntry);
 }
 
 # kmap table - KeyMaps
 struct KeyMap {
     modifiers @0 :UInt16;
     eModifiers @1 :List(UInt8);
-    t @2 :List(Trie) $key("FourCC");
-    entries @3 :List(KmapEntry);
+    #t @2 :KmapTrie $key("FourCC");
+    entries @2 :List(KmapEntry);
 }
 
+# ordered @1 :List(OrderedMap);
+
 struct KmapEntry {
-    to @0 :String32;
+    fromCode @0 :FourCC;
+    to @1 :String32;
     #hint: :String32; #  Displayed as minor text element on key
-    multiTap @1 :List(String32);
-    longPress @2 :List(String32);
-    flicks @3 :List(String32) $fixedLen(8) $if("oFlick");
+    multiTap @2 :List(String32);
+    longPress @3 :List(String32);
+    flicks @4 :List(String32) $fixedLen(8) $if("oFlick");
 }
 
 struct TableKmap {
@@ -182,6 +203,11 @@ struct TableHead {
     publishDate @0 :UInt64;
 }
 
+struct VkeyTrie {
+    tries @0 :List(Node);  # Root @ index 0.
+    results @1 :List(VkeyEntry);
+}
+
 # vkey table
 struct VkeyEntry {
     vkeyCode @0: VkeyCode;
@@ -191,7 +217,7 @@ struct VkeyEntry {
 struct PlatformVkeys {
     platId @0 :FourCC; # 'windows', 'macosx'
     parent @1 :FourCC;  # The 'platId' version of this struct to use for default values.
-    t @2: List(Trie) $key("FourCC"); # to VkeyEntry
+    t @2: VkeyTrie $key("FourCC"); # to VkeyEntry
 }
 
 struct TableVkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
