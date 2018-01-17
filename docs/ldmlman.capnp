@@ -5,6 +5,9 @@
 #
 # Additionally, List implies a managed corresponding 'length' element for the representation.
 # Cap'n Proto automanages this.
+#
+# It also automanages offsets to each entry within a structure, which would need to be implemented
+# if this turns more into a specification reference file for a different implementation.
 
 # Annotations
 
@@ -204,6 +207,10 @@ struct CordEntry { # Or, just a UInt16 to be unpacked, if we need that optimizat
     v @1 :CordVal;
 }
 
+<<<<<<< Updated upstream
 struct TableCord {
+=======
+struct CordTable { # Character ordering
+>>>>>>> Stashed changes
     entries @0: List(CordEntry);
 }
