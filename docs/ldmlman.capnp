@@ -74,33 +74,31 @@ struct Rule {
     error @0 :Bool;
 	oBefore @1 :Offset;
     oAfter @2 :Offset;  
-	to @3 :String32;
-    before @4 :Trie $result("Bool");
-    after @5 :Trie $result("Bool");
+    next @3 :Offset; # To the next 'Rule' with the same 'from'.
+	to @4 :String32;
+    before @5 :Trie $result("Bool");
+    after @6 :Trie $result("Bool");
 }
 
-struct Trns {
+struct TableTrns {
     settings @0 :UInt16;
-    numRules @1 :UInt16;
-	oOutputs @2 :Offset;
-    t @3 :Trie $result("Offset"); # Rule
-    outputs @4 :List(Rule) $len16("numRules");
+	oOutputs @1 :Offset;
+    t @2 :Trie $result("Offset"); # Rule
+    outputs @3 :List(Rule);
 }
 
 # Final Transform
-struct Trnf {
-    numRules @0 :UInt16;
-	oOutputs @1 :Offset;
-    t @2 :Trie $result("Offset"); # Rule
-    outputs @3 :List(Rule) $len16("numRules");
+struct TableTrnf {
+	oOutputs @0 :Offset;
+    t @1 :Trie $result("Offset"); # Rule
+    outputs @2 :List(Rule);
 }
 
 # Backspace Transform
-struct Trnb {
-    numRules @0 :UInt16;
-	oOutputs @1 :Offset;
-    t @2 :Trie $result("Offset"); # Rule
-    outputs @3 :List(Rule) $len16("numRules");
+struct TableTrnb {
+	oOutputs @0 :Offset;
+    t @1 :Trie $result("Offset"); # Rule
+    outputs @2 :List(Rule);
 }
 
 # Reorder
@@ -109,46 +107,42 @@ struct OrderRule {
         prebase @0 :Bool;
         tertiaryBase @1 :Bool;
         order @2 :Int8;
+        tertiary @3 :Int8;
     }
     error @0 :Bool;
-    iLen @1 :UInt8;
+    next @1 :Offset; # To the 'next' OrderRule with the same 'from'.
 	oAfter @2 :Offset;
-    order @3 :List(Info) $len8("iLen");
+    order @3 :List(Info);
     before @4 :Trie $result("Bool");
     after @5 :Trie $result("Bool");
 }
 
-struct Trnr {
-    numRules @0 :UInt16;
-	oOutputs @1 :Offset;
-    t @2 :Trie $result("Offset"); # Rule
-    outputs @3 :List(OrderRule) $len16("numRules");
+struct TableTrnr {
+	oOutputs @0 :Offset;
+    t @1 :Trie $result("Offset"); # OrderRule
+    outputs @2 :List(OrderRule);
 }
 
 # KeyMaps
 struct KeyMap {
-    eModLen @0 :UInt8;
-    modifiers @1 :UInt16;
-    oEntries @2 :Offset;
-    entriesLen @3 :UInt16;
-    eModifiers @4 :Data $len8("eModLen");
-    t @5 :Trie $result("FourCC");
-    entries @6 :List(KmapEntry) $len16("entriesLen");
+    modifiers @0 :UInt16;
+    oEntries @1 :Offset;
+    eModifiers @2 :Data;
+    t @3 :Trie $result("FourCC");
+    entries @4 :List(KmapEntry);
 }
 
 struct KmapEntry {
     to @0 :String32;
-    multiLen @1 :UInt8;
-    oLong @2 :Offset;
-    longLen @3 :UInt8;
-    oFlick @4 :Offset;
+    oLong @1 :Offset;
+    oFlick @2 :Offset;
     #hint: :String32; # If doing longpress hints, what string signals to a user that the key has longpress options?
-    multiTap @5 :List(String32) $len8("multiLen");
-    longPress @6 :List(String32) $len8("longLen");
-    flicks @7 :List(String32) $fixedLen(8) $if("oFlick");
+    multiTap @3 :List(String32);
+    longPress @4 :List(String32);
+    flicks @5 :List(String32) $if("oFlick");
 }
 
-struct Kmap {
+struct TableKmap {
     maps @0 :List(KeyMap);
 }
 
@@ -172,24 +166,27 @@ struct LayerSwitch {
 
 struct Layer {
     modifier @0 :BitFlags16; # A set of bitflags corresponding to the modifier represented by the layer.
-    rowsLen @1 :UInt8;
-    switchesLen @2 :UInt8;
-    vkeysLen @3 :UInt8;
-    oSwitches @4 :Offset;
-    rows @5 :List(LayerRow) $len8("rowsLen");
-    switches @6 :List(LayerSwitch) $len8("switchesLen");
+    vkeysLen @1 :UInt8;
+    oSwitches @2 :Offset;
+    rows @3 :List(LayerRow);
+    switches @4 :List(LayerSwitch);
 }
 
-struct Layr {
+struct TableLayr {
     layers @0 :List(Layer);
 }
 
-struct Name {
-    names @0 :List(String32);
+struct NameEntry {
+    id @0 :FourCC;
+    name @1 :Text;
 }
 
-struct Head {
-    ver @0 :String32;
+struct TableName {
+    entries @0 :List(NameEntry);
+}
+
+struct TableHead {
+    publishDate @0 :UInt64;
 }
 
 struct VkeyEntry {
@@ -198,10 +195,22 @@ struct VkeyEntry {
 }
 
 struct PlatformVkeys {
-    platId @0: FourCC; # 'windows', 'macosx' 
-    t @1: Trie $result("Offset"); # to VkeyEntry
+    platId @0 :FourCC; # 'windows', 'macosx' 
+    t @1 :Trie $result("Offset"); # to VkeyEntry
 }
 
-struct Vkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
+struct TableVkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
     platforms @0 :List(PlatformVkeys);
+}
+
+struct CordEntry { # Or, just a UInt16 to be unpacked, if we need that optimization.
+    isTertiary @0 :Bool;
+    tertiaryBase @1 :Bool;
+    hasRule @2 :Bool;
+    preBase @3 :Bool;
+    order @4 :UInt8;
+}
+
+struct CordTable {
+    entries @0: List(CordEntry);
 }
