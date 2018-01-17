@@ -46,8 +46,8 @@ struct Directory {
 # Trie
 annotation key(field) :Text;    # Denotes the type of the key in the trie.
 
-struct Trie(Result) {
-    result @0 :Result;
+struct Trie {
+    result @0 :UInt16; # Index into list of Rules
 
     trieData :union {
         ordered @1 :List(OrderedTrie);
@@ -55,33 +55,23 @@ struct Trie(Result) {
     }
 }
 
-struct OrderedTrie(Result) {
+struct OrderedTrie {
     c @0 :Char;
-    t @1 :Trie(Result); # Reference to next Trie node
+    t @1 :UInt32; # Reference to next Trie node
 }
 
-struct SegmentedTrie(Result) {  # Run-length encoding style
+struct SegmentedTrie {  # Run-length encoding style
     c @0 :Char; # First char
-    t @1 :List(Trie(Result)); # Reference to next Trie node for each char in run.
+    t @1 :UInt32; # Reference to next Trie node for each char in run.
 }
 
 struct BoolTrie {
     result @0 :Bool; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
                        # 0 indicates transition node (no rule here)
     trieData :union {
-        ordered @1 :List(BoolOrderedTrie);
-        segmented @2 :List(BoolSegmentedTrie);
+        ordered @1 :List(OrderedTrie);
+        segmented @2 :List(SegmentedTrie);
     }
-}
-
-struct BoolOrderedTrie {
-    c @0 :Char;
-    t @1 :BoolTrie; # Reference to next Trie node
-}
-
-struct BoolSegmentedTrie {  # Run-length encoding style
-    c @0 :Char; # First char
-    t @1 :List(BoolTrie); # Reference to next Trie node for each char in run.
 }
 
 # trns table - Simple Transform
@@ -89,25 +79,25 @@ struct Rule {
     error @0 :Bool;
     next @1 :Rule; # To the next 'Rule' with the same 'from'.
 	to @2 :String32;
-    before @3 :BoolTrie;
-    after @4 :BoolTrie;
+    before @3 :List(BoolTrie);
+    after @4 :List(BoolTrie);
 }
 
 struct TableTrns {
     settings @0 :UInt16;
-    t @1 :Trie(Rule) $key("Char");
+    t @1 :List(Trie) $key("Char");
     #outputs @2 :List(Rule);  # Would be a master list of the contained Rule objects.
 }
 
 # trnf table - Final transforms
 struct TableTrnf {
-    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
+    t @0 :List(Trie) $key("Char"); # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
 # trnb table - backspace transforms
 struct TableTrnb {
-    t @0 :Trie(Rule) $key("Char");; # Rule index into outputs.
+    t @0 :List(Trie) $key("Char"); # Rule index into outputs.
     #outputs @1 :List(Rule);
 }
 
@@ -122,12 +112,12 @@ struct OrderRule {
     error @0 :Bool;
     next @1 :OrderRule; # To the 'next' OrderRule with the same 'from'.
     order @2 :List(Info);
-    before @3 :BoolTrie;
-    after @4 :BoolTrie;
+    before @3 :List(BoolTrie);
+    after @4 :List(BoolTrie);
 }
 
 struct TableTrnr {
-    t @0 :Trie(OrderRule) $key("Char");; # Rule
+    t @0 :List(Trie) $key("Char"); # Rule
     #outputs @1 :List(OrderRule);
 }
 
@@ -135,7 +125,7 @@ struct TableTrnr {
 struct KeyMap {
     modifiers @0 :UInt16;
     eModifiers @1 :List(UInt8);
-    t @2 :Trie(KmapEntry) $key("FourCC");
+    t @2 :List(Trie) $key("FourCC");
     entries @3 :List(KmapEntry);
 }
 
@@ -201,7 +191,7 @@ struct VkeyEntry {
 struct PlatformVkeys {
     platId @0 :FourCC; # 'windows', 'macosx'
     parent @1 :FourCC;  # The 'platId' version of this struct to use for default values.
-    t @2: Trie(VkeyEntry) $key("FourCC"); # to VkeyEntry
+    t @2: List(Trie) $key("FourCC"); # to VkeyEntry
 }
 
 struct TableVkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
