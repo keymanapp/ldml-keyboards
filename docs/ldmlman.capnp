@@ -17,7 +17,6 @@ annotation if(field) :Text;
 # Basic types
 using FourCC = UInt32; # Denotes a four-character code in ASCII, compressed into a single 32-bit value.  
                        # TODO: Is FourCC Little-endian or Big-endian?
-using Offset = UInt32; # Denotes an address offset for use in memory-mapped loads.
 using Char = UInt32; # Denotes a UTF-32 character.
 using BitFlags16 = UInt16;  # Denotes a set of bit flags representing multiple booleans.
 using VkeyCode = UInt16;    # Denotes a VKey value.
@@ -33,9 +32,9 @@ struct String32 { # Denotes a UTF-32-based string.
 # }
 
 # Directory
-struct DirEntry {
+struct DirEntry(Table) {
     name @0 :FourCC;
-    offset @1 :Offset;  # Offset to the represented table.
+    table @1 :Table;  # Reference to the represented table.
     length @2 :UInt32;
     version @3 :UInt32;
 }
@@ -49,50 +48,69 @@ struct Directory {
 annotation result(field) :Text; # Denotes the type represented by the 'result' field.
 annotation key(field) :Text;    # Denotes the type of the key in the trie.
 
-struct Trie {
-    result @0 :UInt32; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
-                       # 0 indicates transition node (no rule here)
+struct Trie(Result) {
+    result @0 :Result;
+    
     trieData :union {
         ordered @1 :List(OrderedTrie);
         segmented @2 :List(SegmentedTrie);
     }
 }
 
-struct OrderedTrie {
+struct OrderedTrie(Result) {
     c @0 :Char;
-    o @1 :Offset; # Offset to next Trie node
+    t @1 :Trie(Result); # Reference to next Trie node
 }
 
-struct SegmentedTrie {  # Run-length encoding style
+struct SegmentedTrie(Result) {  # Run-length encoding style
     c @0 :Char; # First char
-    offsets @1 :List(Offset); # Offset to next Trie node for each char in run.
+    t @1 :List(Trie(Result)); # Reference to next Trie node for each char in run.
+}
+
+struct BoolTrie {
+    result @0 :Bool; # Offset to string, magic value (for string match success) or to rule (depending upon contextual use).
+                       # 0 indicates transition node (no rule here)
+    trieData :union {
+        ordered @1 :List(BoolOrderedTrie);
+        segmented @2 :List(BoolSegmentedTrie);
+    }
+}
+
+struct BoolOrderedTrie {
+    c @0 :Char;
+    t @1 :BoolTrie; # Reference to next Trie node
+}
+
+struct BoolSegmentedTrie {  # Run-length encoding style
+    c @0 :Char; # First char
+    t @1 :List(BoolTrie); # Reference to next Trie node for each char in run.
 }
 
 # trns table - Simple Transform
 struct Rule {
     error @0 :Bool;
-    next @1 :Offset; # To the next 'Rule' with the same 'from'.
+    next @1 :Rule; # To the next 'Rule' with the same 'from'.
 	to @2 :String32;
-    before @3 :Trie $result("Bool");
-    after @4 :Trie $result("Bool");
+    before @3 :BoolTrie;
+    after @4 :BoolTrie;
 }
 
 struct TableTrns {
     settings @0 :UInt16;
-    t @1 :Trie $result("Offset"); # Rule
-    outputs @2 :List(Rule);
+    t @1 :Trie(Rule);
+    #outputs @2 :List(Rule);  # Would be a master list of the contained Rule objects.
 }
 
 # trnf table - Final transforms
 struct TableTrnf {
-    t @0 :Trie $result("Offset"); # Rule
-    outputs @1 :List(Rule);
+    t @0 :Trie(Rule); # Rule index into outputs.
+    #outputs @1 :List(Rule);
 }
 
 # trnb table - backspace transforms
 struct TableTrnb {
-    t @0 :Trie $result("Offset"); # Rule
-    outputs @1 :List(Rule);
+    t @0 :Trie(Rule); # Rule index into outputs.
+    #outputs @1 :List(Rule);
 }
 
 # trnr table - reorders
@@ -104,22 +122,22 @@ struct OrderRule {
         tertiary @3 :Int8;
     }
     error @0 :Bool;
-    next @1 :Offset; # To the 'next' OrderRule with the same 'from'.
+    next @1 :OrderRule; # To the 'next' OrderRule with the same 'from'.
     order @2 :List(Info);
-    before @3 :Trie $result("Bool");
-    after @4 :Trie $result("Bool");
+    before @3 :BoolTrie;
+    after @4 :BoolTrie;
 }
 
 struct TableTrnr {
-    t @0 :Trie $result("Offset"); # Rule
-    outputs @1 :List(OrderRule);
+    t @0 :Trie(OrderRule); # Rule
+    #outputs @1 :List(OrderRule);
 }
 
 # kmap table - KeyMaps
 struct KeyMap {
     modifiers @0 :UInt16;
     eModifiers @1 :List(UInt8);
-    t @2 :Trie $result("Offset") $key("FourCC");
+    t @2 :Trie(KmapEntry) $key("FourCC");
     entries @3 :List(KmapEntry);
 }
 
@@ -139,9 +157,8 @@ struct TableKmap {
 struct LayerKey {
     #width :UInt16; # or should it be Float32? # Denotes the width of a key.
     iso @0 :FourCC; # The represented key ISO code.
-    oHint @1 :Offset;
-    cap @2 :String32; # The displayed key cap.
-    hint @3 :String32; # The longpress hint, if it exists.
+    cap @1 :String32; # The displayed key cap.
+    hint @2 :String32; # The longpress hint, if it exists.
 }
 
 struct LayerRow {
@@ -149,17 +166,15 @@ struct LayerRow {
 }
 
 struct LayerSwitch {
-    oLayer @0 :Offset;
-    iso @1: FourCC;
-    layer @2 :String32;
+    iso @0 :FourCC;
+    layer @1 :String32;
 }
 
 struct Layer {
     modifier @0 :BitFlags16; # A set of bitflags corresponding to the modifier represented by the layer.
     eModifiers @1 :List(UInt8);
-    vkeys @2 :Offset;           # Relative to start of vkey table
-    rows @3 :List(LayerRow);
-    switches @4 :List(LayerSwitch);
+    rows @2 :List(LayerRow);
+    switches @3 :List(LayerSwitch);
 }
 
 struct TableLayr {
@@ -186,9 +201,9 @@ struct VkeyEntry {
 }
 
 struct PlatformVkeys {
-    platId @0: FourCC; # 'windows', 'macosx'
-    parent @1 :Offset;
-    t @2: Trie $result("Offset"); # to VkeyEntry
+    platId @0 :FourCC; # 'windows', 'macosx'
+    parent @1 :FourCC;  # The 'platId' version of this struct to use for default values.
+    t @2: Trie(VkeyEntry); # to VkeyEntry
 }
 
 struct TableVkey { # The main Vkey table.  Implicitly based on Windows 'en-us', with further defs here overriding said base.
@@ -207,10 +222,6 @@ struct CordEntry { # Or, just a UInt16 to be unpacked, if we need that optimizat
     v @1 :CordVal;
 }
 
-<<<<<<< Updated upstream
-struct TableCord {
-=======
-struct CordTable { # Character ordering
->>>>>>> Stashed changes
+struct TableCord { # Character ordering
     entries @0: List(CordEntry);
 }
