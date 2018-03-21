@@ -30,6 +30,11 @@ struct String32 { # Denotes a UTF-32-based string.
     c @1 :List(Char);
 }
 
+struct Modifiers {
+    modifiers @0 :UInt16;
+    eModifiers @1 :List(UInt8);
+}
+
 # Directory
 struct DirEntry(Table) {
     name @0 :FourCC;
@@ -71,7 +76,8 @@ struct OrderedMap {
 
 struct SegmentedMap {  # Run-length encoding style
     c @0 :Char; # First char
-    t @1 :Index; # Reference to next Trie node for each char in run.
+    len @1 :UInt16; # length of range of characters
+    t @2 :Index; # Reference to next Trie node
 }
 
 struct BoolTrie {
@@ -141,10 +147,9 @@ struct KmapTrie {
 
 # kmap table - KeyMaps
 struct KeyMap {
-    modifiers @0 :UInt16;
-    eModifiers @1 :List(UInt8);
+    modifiers @0 :Modifiers;
     #t @2 :KmapTrie $key("FourCC");
-    entries @2 :List(KmapEntry);
+    entries @1 :List(KmapEntry);
 }
 
 # ordered @1 :List(OrderedMap);
@@ -176,14 +181,13 @@ struct LayerRow {
 
 struct LayerSwitch {
     iso @0 :FourCC;
-    layer @1 :String32;
+    layer @1 :Modifiers;
 }
 
 struct Layer {
-    modifier @0 :BitFlags16; # A set of bitflags corresponding to the modifier represented by the layer.
-    eModifiers @1 :List(UInt8);
-    rows @2 :List(LayerRow);
-    switches @3 :List(LayerSwitch);
+    modifier @0 :Modifiers; # A set of bitflags corresponding to the modifier represented by the layer.
+    rows @1 :List(LayerRow);
+    switches @2 :List(LayerSwitch);
 }
 
 struct TableLayr {
